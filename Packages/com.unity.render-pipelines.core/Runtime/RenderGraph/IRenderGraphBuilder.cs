@@ -11,6 +11,8 @@ namespace UnityEngine.Rendering.RenderGraphModule
     {
         /// <summary>
         /// Declare that this pass uses the input texture.
+        /// declares that a render pass uses an input texture resource with specified access flags
+        /// The method allows you to specify how the texture will be accessed during the pass through AccessFlags (Read, Write, etc.).
         /// </summary>
         /// <param name="input">The texture resource to use during the pass.</param>
         /// <param name="flags">A combination of flags indicating how the resource will be used during the pass. Default value is set to AccessFlag.Read </param>
@@ -55,6 +57,8 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
         /// <summary>
         /// Declare that this pass uses the input compute buffer.
+        /// declares that a render pass uses a compute buffer resource with specified access flags.
+        ///  It returns the same buffer handle that was passed in.
         /// </summary>
         /// <param name="input">The compute buffer resource to use during the pass.</param>
         /// <param name="flags">A combination of flags indicating how the resource will be used during the pass. Default value is set to AccessFlag.Read </param>
@@ -64,6 +68,8 @@ namespace UnityEngine.Rendering.RenderGraphModule
         /// <summary>
         /// Create a new Render Graph Texture resource.
         /// This texture will only be available for the current pass and will be assumed to be both written and read so users don't need to add explicit read/write declarations.
+        /// creates a temporary texture resource that exists only for the current pass and is automatically assumed to be both read and written.
+        /// 
         /// </summary>
         /// <param name="desc">Texture descriptor.</param>
         /// <returns>A new transient TextureHandle.</returns>
@@ -107,6 +113,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
         /// <summary>
         /// Allow or not pass culling.
+        /// controls whether a render pass can be automatically culled (removed) by the render graph optimization system.
         /// By default all passes can be culled out if the render graph detects it's not actually used.
         /// In some cases, a pass may not write or read any texture but rather do something with side effects (like setting a global texture parameter for example).
         /// This function can be used to tell the system that it should not cull this pass.

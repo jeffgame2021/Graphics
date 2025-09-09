@@ -14,12 +14,17 @@ namespace UnityEngine.Rendering.RenderGraphModule
         RenderGraphPass m_RenderPass;
         RenderGraphResourceRegistry m_Resources;
         RenderGraph m_RenderGraph;
+
+        /// <summary>
+        /// 是否已清理
+        /// </summary>
         bool m_Disposed;
 
         #region Public Interface
         /// <summary>
         /// Specify that the pass will use a Texture resource as a color render target.
         /// This has the same effect as WriteTexture and also automatically sets the Texture to use as a render target.
+        /// 与WriteTexture相同，但会在通道开始时在提供的绑定索引处自动将纹理绑定为渲染纹理。
         /// </summary>
         /// <param name="input">The Texture resource to use as a color render target.</param>
         /// <param name="index">Index for multiple render target usage.</param>
@@ -56,6 +61,8 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
         /// <summary>
         /// Specify a Texture resource to read from during the pass.
+        /// 声明渲染通道会读取传入的纹理input
+        /// ReadTexture方法用于指定渲染通道将在执行期间读取纹理资源。此声明允许渲染图系统跟踪通道之间的资源依赖关系并优化资源分配。
         /// </summary>
         /// <param name="input">The Texture resource to read from during the pass.</param>
         /// <returns>An updated resource handle to the input resource.</returns>
@@ -63,11 +70,13 @@ namespace UnityEngine.Rendering.RenderGraphModule
         {
             CheckResource(input.handle);
 
+            // Fallback Handling: The method checks if the resource is imported and whether it needs a fallback texture
             if (!m_Resources.IsRenderGraphResourceImported(input.handle) && m_Resources.TextureNeedsFallback(input))
             {
                 var textureResource = m_Resources.GetTextureResource(input.handle);
 
                 // Ensure we get a fallback to black
+                // Black Texture Fallback: If a texture is read from but never written to, it ensures a fallback to a black texture
                 textureResource.desc.clearBuffer = true;
                 textureResource.desc.clearColor = Color.black;
 
@@ -77,22 +86,30 @@ namespace UnityEngine.Rendering.RenderGraphModule
                     return fallback;
 
                 // If not, simulate a write to the texture so that it gets allocated
+                // Write Simulation: If no preallocated fallback is available, it simulates a write to the texture by calling WriteTexture(input)
+                // to ensure the texture gets properly allocated.
                 WriteTexture(input);
             }
 
+            // Dependency Registration: Finally, it registers the resource as a read dependency for the current pass
             m_RenderPass.AddResourceRead(input.handle);
             return input;
         }
 
         /// <summary>
         /// Specify a Texture resource to write to during the pass.
+        /// 声明渲染通道会写入传入的纹理input
         /// </summary>
         /// <param name="input">The Texture resource to write to during the pass.</param>
         /// <returns>An updated resource handle to the input resource.</returns>
         public TextureHandle WriteTexture(in TextureHandle input)
         {
             CheckResource(input.handle);
+            // Write Count Tracking: The method increments the write count for the resource through the resource registry,
+            // which is used for resource lifetime management and optimization
             m_Resources.IncrementWriteCount(input.handle);
+            // Pass Dependency Tracking: The method registers the resource write with the render pass, adding it to the
+            // pass's resource write list for dependency analysis during graph compilation
             m_RenderPass.AddResourceWrite(input.handle);
             return input;
         }
@@ -291,6 +308,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
         /// <summary>
         /// Used to indicate that a pass depends on an external renderer list (that is not directly used in this pass).
+        /// handle external renderer list dependencies in Unity's Render Graph system
         /// </summary>
         /// <param name="input">The renderer list handle this pass depends on.</param>
         /// <returns>A <see cref="RendererListHandle"/></returns>
@@ -311,30 +329,48 @@ namespace UnityEngine.Rendering.RenderGraphModule
             m_Disposed = false;
         }
 
+        /// <summary>
+        /// ensure builders are properly disposed
+        /// The Dispose method is designed to be used with C#'s using statement pattern,
+        /// ensuring automatic cleanup when the builder goes out of scope. The disposal
+        /// process is when the actual pass configuration is finalized and registered
+        /// with the render graph system. ensuring proper resource management and pass registration
+        /// </summary>
+        /// <param name="disposing"></param>
         void Dispose(bool disposing)
         {
+            // State Management: Checking disposal state and preventing double disposal
             if (m_Disposed)
                 return;
 
+            // Pass Registration: Setting the render graph state and registering the pass
             m_RenderGraph.RenderGraphState = RenderGraphState.RecordingGraph;
             m_RenderGraph.OnPassAdded(m_RenderPass);
             m_Disposed = true;
         }
 
+        /// <summary>
+        /// 对资源有效性进行检查
+        /// </summary>
+        /// <param name="res">要检查的资源</param>
+        /// <param name="checkTransientReadWrite">是否检查瞬态资源的读写</param>
+        /// <exception cref="ArgumentException"></exception>
         [Conditional("DEVELOPMENT_BUILD"), Conditional("UNITY_EDITOR")]
         void CheckResource(in ResourceHandle res, bool checkTransientReadWrite = true)
         {
             if(RenderGraph.enableValidityChecks)
             {
+                // Basic Validity Check, verifies that the resource handle is valid
                 if (res.IsValid())
                 {
+                    // Transient Resource Validation
                     int transientIndex = m_Resources.GetRenderGraphResourceTransientIndex(res);
                     // We have dontCheckTransientReadWrite here because users may want to use UseColorBuffer/UseDepthBuffer API to benefit from render target auto binding. In this case we don't want to raise the error.
                     if (transientIndex == m_RenderPass.index && checkTransientReadWrite)
                     {
                         Debug.LogError($"Trying to read or write a transient resource at pass {m_RenderPass.name}.Transient resource are always assumed to be both read and written.");
                     }
-
+                    // Cross-Pass Transient Usage Check: It ensures that transient resources are not used across different render passes, throwing an exception if a transient resource from one pass is used in another
                     if (transientIndex != -1 && transientIndex != m_RenderPass.index)
                     {
                         throw new ArgumentException($"Trying to use a transient texture (pass index {transientIndex}) in a different pass (pass index {m_RenderPass.index}).");
@@ -347,6 +383,10 @@ namespace UnityEngine.Rendering.RenderGraphModule
             }
         }
 
+        /// <summary>
+        /// 生成调试数据
+        /// </summary>
+        /// <param name="value"></param>
         internal void GenerateDebugData(bool value)
         {
             m_RenderPass.GenerateDebugData(value);
