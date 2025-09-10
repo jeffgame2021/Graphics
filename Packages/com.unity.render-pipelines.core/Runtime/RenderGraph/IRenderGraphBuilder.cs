@@ -22,6 +22,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
         /// Declare that this pass uses the texture assigned to the global texture slot. The actual texture referenced is indirectly specified here it depends
         /// on the value previous passes that were added to the graph set for the global texture slot. If no previous pass set a texture to the global slot an
         /// exception will be raised.
+        /// allows render passes to declare dependencies on textures that have been registered as global shader properties.
         /// </summary>
         /// <param name="propertyId">The global texture slot read by shaders in this pass. Use Shader.PropertyToID to generate these ids.</param>
         /// <param name="flags">A combination of flags indicating how the resource will be used during the pass. Default value is set to AccessFlag.Read </param>
@@ -125,6 +126,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
         /// Allow commands in the command buffer to modify global state. This will introduce a render graph sync-point in the frame and cause all passes after this pass to never be
         /// reordered before this pass. This may nave negative impact on performance and memory use if not used carefully so it is recommended to only allow this in specific use cases.
         /// This will also set AllowPassCulling to false.
+        /// allows render passes to indicate they will modify global shader state
         /// </summary>
         /// <param name="value">True to allow global state modification.</param>
         public void AllowGlobalStateModification(bool value);
@@ -301,6 +303,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
     /// <summary>
     /// A builder for an unsafe render pass.
+    /// provides direct access to the command buffer API for render passes that need more flexibility than standard raster or compute passes.
     /// <see cref="RenderGraph.AddUnsafePass"/>
     /// </summary>
     [MovedFrom(true, "UnityEngine.Experimental.Rendering.RenderGraphModule", "UnityEngine.Rendering.RenderGraphModule")]

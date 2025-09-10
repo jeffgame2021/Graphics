@@ -15,6 +15,8 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
     // For performance reasons, ResourceHandle is readonly.
     // To update an existing instance with a new version, recreate it using its copy constructor
+    // The ResourceHandle struct is a fundamental component of Unity's RenderGraph system that provides a lightweight,
+    // type-safe way to reference and track GPU resources like textures and buffers.
     internal readonly struct ResourceHandle : IEquatable<ResourceHandle>
     {
         // Note on handles validity.
@@ -23,16 +25,26 @@ namespace UnityEngine.Rendering.RenderGraphModule
         // In order to avoid using those, we incorporate the execution index in a 16 bits hash to make sure the handle is coming from the current execution.
         // If not, it's considered invalid.
         // We store this validity mask in the upper 16 bits of the index.
+
+        // ResourceHandle implements a sophisticated validity system using the upper 16 bits of the index value as a validity mask.
+        // This prevents stale handles from previous render graph executions from being accidentally used
         const uint kValidityMask = 0xFFFF0000;
         const uint kIndexMask = 0xFFFF;
 
         private readonly uint m_Value;
+
+        // ResourceHandle supports versioning to track different states of the same resource as it's written to multiple times during rendering.
         private readonly int m_Version;
         private readonly RenderGraphResourceType m_Type;
 
+        // 当前的有效位，会在NewFrame函数中根据当前帧数进行更新
         static uint s_CurrentValidBit = 1 << 16;
+
         static uint s_SharedResourceValidBit = 0x7FFF << 16;
 
+        /// <summary>
+        /// m_Value的前16位是Index值
+        /// </summary>
         public int index
         { 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -56,6 +68,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
 
         internal ResourceHandle(int value, RenderGraphResourceType type, bool shared)
         {
+            // value保存在m_Value的低16位，高16位保存Valid Bit
             Debug.Assert(value <= 0xFFFF);
             m_Value = ((uint)value & kIndexMask) | (shared ? s_SharedResourceValidBit : s_CurrentValidBit);
             m_Type = type;
@@ -72,6 +85,7 @@ namespace UnityEngine.Rendering.RenderGraphModule
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsValid()
         {
+            // 读取高16位的值
             var validity = m_Value & kValidityMask;
             return validity != 0 && (validity == s_CurrentValidBit || validity == s_SharedResourceValidBit);
         }
@@ -89,16 +103,23 @@ namespace UnityEngine.Rendering.RenderGraphModule
             return false;
         }
 
+        /// <summary>
+        /// The method serves a critical purpose in resource handle validation across render graph execution frames.
+        /// It uses a validity bit system to ensure that resource handles from previous executions are not accidentally reused.
+        /// </summary>
+        /// <param name="executionIndex"></param>
         static public void NewFrame(int executionIndex)
         {
             uint previousValidBit = s_CurrentValidBit;
             // Scramble frame count to avoid collision when wrapping around.
+            // Scrambling the execution index: It takes the execution index and applies a scrambling algorithm to generate a new validity bit
             s_CurrentValidBit = (uint)(((executionIndex >> 16) ^ (executionIndex & 0xffff) * 58546883) << 16);
             // In case the current valid bit is 0, even though perfectly valid, 0 represents an invalid handle, hence we'll
             // trigger an invalid state incorrectly. To account for this, we actually skip 0 as a viable s_CurrentValidBit and
             // start from 1 again.
             // In the same spirit, s_SharedResourceValidBit is reserved for shared textures so we should never use it otherwise
             // resources could be considered valid at frame N+1 (because shared) even though they aren't.
+            // Avoiding collision values: The method specifically avoids using 0 or the shared resource validity bit to prevent invalid state detection
             if (s_CurrentValidBit == 0 || s_CurrentValidBit == s_SharedResourceValidBit)
             {
                 // We need to make sure we don't pick the same value twice.
